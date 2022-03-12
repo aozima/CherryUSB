@@ -36,6 +36,8 @@ struct usbh_rndis {
 #define RNDIS_MSG_KEEPALIVE	0x00000008
 #define RNDIS_MSG_KEEPALIVE_C	(RNDIS_MSG_KEEPALIVE|RNDIS_MSG_COMPLETION)
 
+typedef uint32_t __le32;
+
 struct rndis_init {		/* OUT */
 	/* header and: */
 	uint32_t	msg_type;			/* RNDIS_MSG_INIT */
@@ -44,6 +46,23 @@ struct rndis_init {		/* OUT */
 	uint32_t	major_version;			/* of rndis (1.0) */
 	uint32_t	minor_version;
 	uint32_t	max_transfer_size;
+} __attribute__ ((packed));
+
+struct rndis_init_c {		/* IN */
+	/* header and: */
+	__le32	msg_type;			/* RNDIS_MSG_INIT_C */
+	__le32	msg_len;
+	__le32	request_id;
+	__le32	status;
+	__le32	major_version;			/* of rndis (1.0) */
+	__le32	minor_version;
+	__le32	device_flags;
+	__le32	medium;				/* zero == 802.3 */
+	__le32	max_packets_per_message;
+	__le32	max_transfer_size;
+	__le32	packet_alignment;		/* max 7; (1<<n) bytes */
+	__le32	af_list_offset;			/* zero */
+	__le32	af_list_size;			/* zero */
 } __attribute__ ((packed));
 
 struct rndis_query {		/* OUT */
