@@ -984,6 +984,7 @@ void *usbh_find_class_instance(const char *devname)
     return NULL;
 }
 
+extern const struct usbh_class_driver rndis_class_driver;
 const struct usbh_class_info class_info_table[] = {
 
     { .class = USB_DEVICE_CLASS_CDC,
@@ -1010,6 +1011,12 @@ const struct usbh_class_info class_info_table[] = {
       .vid = 0x00,
       .pid = 0x00,
       .class_driver = &msc_class_driver },
+    { .class = USB_DEVICE_CLASS_WIRELESS,
+      .subclass = 0x01, // RNDIS
+      .protocol = 0x03,
+      .vid = 0x00,
+      .pid = 0x00,
+      .class_driver = &rndis_class_driver },
 #ifdef CONFIG_USBHOST_HUB
     { .class = USB_DEVICE_CLASS_HUB,
       .subclass = 0,
