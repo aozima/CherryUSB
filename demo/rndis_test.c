@@ -19,11 +19,43 @@ static void usbh_cdc_acm_callback(void *arg, int nbytes)
     printf("nbytes:%d\r\n", nbytes);
 }
 
+static int rndis_init(struct usbh_rndis *class, struct usbh_hubport *hport, uint8_t intf)
+{
+    int ret = 0;
+    struct usb_setup_packet *setup;
+
+    USB_LOG_INFO("%s %d\r\n", __FUNCTION__, __LINE__);
+
+    setup = hport->setup;
+
+    /* set interface */
+    {
+        struct rndis_init msg;
+        msg.msg_type = RNDIS_MSG_INIT;
+        msg.msg_len = sizeof(struct rndis_init);
+        msg.request_id = class->request_id++;
+        msg.major_version = 1;
+        msg.minor_version = 0;
+        msg.max_transfer_size = 0x4000;
+
+        setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_CLASS | USB_REQUEST_RECIPIENT_INTERFACE;
+        setup->bRequest = 0;
+        setup->wValue = 0;
+        setup->wIndex = 0;
+        setup->wLength = sizeof(struct rndis_init);
+
+        ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)&msg);
+        USB_LOG_INFO("usbh_control_transfer RNDIS_MSG_INIT ret: %d\r\n", ret);
+    }
+
+    return ret;
+}
+
 int rndis_test(void)
 {
     int ret;
     struct usbh_hubport *hport;
-    uint8_t intf
+    uint8_t intf;
 
     struct usbh_rndis *rndis_class = (struct usbh_rndis *)usbh_find_class_instance("/dev/e1");
     if (rndis_class == NULL) {
@@ -33,6 +65,11 @@ int rndis_test(void)
     USB_LOG_INFO("usbh_rndis=%p\r\n", rndis_class);
 
     memset(cdc_buffer, 0, 512);
+    hport = rndis_class->hport;
+    intf = rndis_class->intf;
+    USB_LOG_INFO("hport=%p, intf=%d, intf_desc.bNumEndpoints:%d\r\n", hport, intf);
+
+    ret = rndis_init(rndis_class, hport, intf);
 
 #if 1
     usbh_ep_bulk_async_transfer(rndis_class->bulkin, cdc_buffer, 2048, usbh_cdc_acm_callback, rndis_class);
