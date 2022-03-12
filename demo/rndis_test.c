@@ -7,7 +7,7 @@
 static uint8_t cdc_buffer[4096];
 static void usbh_cdc_acm_callback(void *arg, int nbytes)
 {
-    //struct usbh_cdc_acm *cdc_acm_class = (struct usbh_cdc_acm *)arg;
+    //struct usbh_cdc_acm *rndis_class = (struct usbh_cdc_acm *)arg;
 
     USB_LOG_INFO("%s %d\r\n", __FUNCTION__, __LINE__);
     if (nbytes > 0) {
@@ -22,23 +22,25 @@ static void usbh_cdc_acm_callback(void *arg, int nbytes)
 int rndis_test(void)
 {
     int ret;
+    struct usbh_hubport *hport;
+    uint8_t intf
 
-    struct usbh_rndis *cdc_acm_class = (struct usbh_rndis *)usbh_find_class_instance("/dev/e1");
-    if (cdc_acm_class == NULL) {
+    struct usbh_rndis *rndis_class = (struct usbh_rndis *)usbh_find_class_instance("/dev/e1");
+    if (rndis_class == NULL) {
         printf("do not find /dev/ttyACM0\r\n");
         return -1;
     }
-    USB_LOG_INFO("usbh_rndis=%p\r\n", cdc_acm_class);
+    USB_LOG_INFO("usbh_rndis=%p\r\n", rndis_class);
 
     memset(cdc_buffer, 0, 512);
 
 #if 1
-    usbh_ep_bulk_async_transfer(cdc_acm_class->bulkin, cdc_buffer, 2048, usbh_cdc_acm_callback, cdc_acm_class);
+    usbh_ep_bulk_async_transfer(rndis_class->bulkin, cdc_buffer, 2048, usbh_cdc_acm_callback, rndis_class);
 #endif
 
 #if 0    
     USB_LOG_INFO("%s %d\r\n", __FUNCTION__, __LINE__);
-    ret = usbh_ep_bulk_transfer(cdc_acm_class->bulkin, cdc_buffer, 512);
+    ret = usbh_ep_bulk_transfer(rndis_class->bulkin, cdc_buffer, 512);
     if (ret < 0) {
         printf("bulk in error\r\n");
         return ret;
@@ -55,7 +57,7 @@ int rndis_test(void)
 
     memcpy(cdc_buffer, data1, 8);
     USB_LOG_INFO("%s %d\r\n", __FUNCTION__, __LINE__);
-    ret = usbh_ep_bulk_transfer(cdc_acm_class->bulkout, cdc_buffer, 8);
+    ret = usbh_ep_bulk_transfer(rndis_class->bulkout, cdc_buffer, 8);
     if (ret < 0) {
         printf("bulk out error\r\n");
         return ret;

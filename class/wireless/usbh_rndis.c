@@ -3,6 +3,7 @@
 
 static const char *DEV_FORMAT = "/dev/e%d";
 
+#if 0
 static int rndis_init(struct usbh_hubport *hport, uint8_t intf)
 {
     int ret = 0;
@@ -42,7 +43,7 @@ static int rndis_init(struct usbh_hubport *hport, uint8_t intf)
     setup->bRequest = 0;
     setup->wValue = 0;
     setup->wIndex = intf;
-    setup->wLength = 7;
+    setup->wLength = sizeof(struct rndis_msg_init);
 
     ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)msg);
     USB_LOG_ERR("init ret: %d\r\n", ret);
@@ -57,11 +58,18 @@ static int rndis_init(struct usbh_hubport *hport, uint8_t intf)
     msg1.msg_len = sizeof(struct rndis_msg_keepalive);
     msg1.request_id = 1;
 
-    ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)&msg1);
-    USB_LOG_ERR("init ret: %d\r\n", ret);
+    setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_CLASS | USB_REQUEST_RECIPIENT_INTERFACE;
+    setup->bRequest = 0;
+    setup->wValue = 0;
+    setup->wIndex = intf;
+    setup->wLength = sizeof(struct rndis_msg_keepalive);
+
+    // ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)&msg1);
+    USB_LOG_ERR("keepalive ret: %d\r\n", ret);
 
     return ret;
 }
+#endif
 
 static int usbh_rndis_connect(struct usbh_hubport *hport, uint8_t intf)
 {
@@ -79,6 +87,9 @@ static int usbh_rndis_connect(struct usbh_hubport *hport, uint8_t intf)
     }
     memset(class, 0, sizeof(struct usbh_rndis));
 
+    class->hport = hport;
+    class->intf = intf;
+
     snprintf(hport->config.intf[intf].devname, CONFIG_USBHOST_DEV_NAMELEN, DEV_FORMAT, intf);
     USB_LOG_INFO("Register RNDIS Class:%s\r\n", hport->config.intf[intf].devname);
     hport->config.intf[intf].priv = class;
@@ -95,12 +106,12 @@ static int usbh_rndis_connect(struct usbh_hubport *hport, uint8_t intf)
     }
 #endif
 
-    ret = rndis_init(hport, intf);
-    if (ret != 0) 
-    {
-        USB_LOG_ERR("rndis_init ret: %d\r\n", ret);
-        return -ENOMEM;
-    }
+    // ret = rndis_init(hport, intf);
+    // if (ret != 0) 
+    // {
+    //     USB_LOG_ERR("rndis_init ret: %d\r\n", ret);
+    //     return -ENOMEM;
+    // }
 
     return ret;
 }
@@ -121,8 +132,11 @@ static int usbh_rndis_data_connect(struct usbh_hubport *hport, uint8_t intf)
     }
     memset(class, 0, sizeof(struct usbh_rndis));
 
+    class->hport = hport;
+    class->intf = intf;
+
     snprintf(hport->config.intf[intf].devname, CONFIG_USBHOST_DEV_NAMELEN, DEV_FORMAT, intf);
-    USB_LOG_INFO("Register RNDIS Class:%s\r\n", hport->config.intf[intf].devname);
+    USB_LOG_INFO("Register RNDIS CDC DATA Class:%s\r\n", hport->config.intf[intf].devname);
     hport->config.intf[intf].priv = class;
 
 #if 1
