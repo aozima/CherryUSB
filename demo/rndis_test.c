@@ -91,7 +91,7 @@ static int rndis_init(struct usbh_rndis *class, struct usbh_hubport *hport, uint
     return ret;
 }
 
-static int rndis_query_oid(struct usbh_rndis *class, uint32_t oid, void *data, int *len)
+static int rndis_query_oid(struct usbh_rndis *class, uint32_t oid, int query_len, void *result, int len)
 {
     int ret = 0;
     uint8_t intf = 0;
@@ -102,10 +102,10 @@ static int rndis_query_oid(struct usbh_rndis *class, uint32_t oid, void *data, i
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
 
     msg.msg_type = RNDIS_MSG_QUERY;
-    msg.msg_len = sizeof(msg);
+    msg.msg_len = query_len + sizeof(msg);
     msg.request_id = class->request_id++;
     msg.oid = oid;
-    msg.len = *len;
+    msg.len = query_len;
     msg.offset = 20;
 
     setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_CLASS | USB_REQUEST_RECIPIENT_INTERFACE;
@@ -121,16 +121,14 @@ static int rndis_query_oid(struct usbh_rndis *class, uint32_t oid, void *data, i
     setup->bRequest = CDC_REQUEST_GET_ENCAPSULATED_RESPONSE;
     setup->wValue = 0;
     setup->wIndex = intf;
-    setup->wLength = *len;
+    setup->wLength = 256; // TODO: get real resp len.
 
-    ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)data);
+    ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)result);
     USB_LOG_INFO("CDC_REQUEST_GET_ENCAPSULATED_RESPONSE OID ret: %d\r\n", ret);
-
-    *len = 80; // TODO: 获取实际长度
 
     if(ret == 0)
     {
-        const struct rndis_query_c *resp = (const struct rndis_query_c *)data;
+        const struct rndis_query_c *resp = (const struct rndis_query_c *)result;
 
         USB_LOG_INFO("resp msg type: %08X len: %d id: %08X\r\n", resp->msg_type, resp->msg_len, resp->request_id);
     }
@@ -140,7 +138,7 @@ static int rndis_query_oid(struct usbh_rndis *class, uint32_t oid, void *data, i
 
 int rndis_test(void)
 {
-    int ret;
+    int ret, len;
     struct usbh_hubport *hport;
     uint8_t intf;
 
@@ -158,6 +156,7 @@ int rndis_test(void)
 
     ret = rndis_init(rndis_class, hport, 0);
 
+#if 0
     int len = sizeof(cdc_buffer);
     ret = rndis_query_oid(rndis_class, RNDIS_OID_GEN_SUPPORTED_LIST, cdc_buffer, &len);
     USB_LOG_INFO("rndis_query_oid RNDIS_OID_GEN_SUPPORTED_LIST, ret=%d, len=%d.\r\n", ret, len);
@@ -165,6 +164,25 @@ int rndis_test(void)
     {
         dump_hex(cdc_buffer, len);
     }
+#endif
+
+    int query_len, result_len;
+
+    query_len = 6;
+    ret = rndis_query_oid(rndis_class, RNDIS_OID_802_3_PERMANENT_ADDRESS, query_len, cdc_buffer, len);
+    USB_LOG_INFO("rndis_query_oid RNDIS_OID_802_3_PERMANENT_ADDRESS, ret=%d, len=%d.\r\n", ret, len);
+    if(ret == 0)
+    {
+        dump_hex(cdc_buffer, query_len);
+    }
+    ret = rndis_query_oid(rndis_class, RNDIS_OID_802_3_CURRENT_ADDRESS, query_len, cdc_buffer, len);
+    USB_LOG_INFO("rndis_query_oid RNDIS_OID_802_3_CURRENT_ADDRESS, ret=%d, len=%d.\r\n", ret, len);
+    if(ret == 0)
+    {
+        dump_hex(cdc_buffer, query_len);
+    }
+
+    
 
 #if 0
     usbh_ep_bulk_async_transfer(rndis_class->bulkin, cdc_buffer, 2048, usbh_cdc_acm_callback, rndis_class);
