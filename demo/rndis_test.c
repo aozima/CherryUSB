@@ -34,7 +34,7 @@ static void usbh_cdc_acm_callback(void *arg, int nbytes)
 {
     //struct usbh_cdc_acm *rndis_class = (struct usbh_cdc_acm *)arg;
 
-    USB_LOG_INFO("%s %d\r\n", __FUNCTION__, __LINE__);
+    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
     if (nbytes > 0) {
         for (size_t i = 0; i < nbytes; i++) {
             printf("0x%02x ", cdc_buffer[i]);
@@ -49,7 +49,7 @@ static int rndis_init(struct usbh_rndis *class, struct usbh_hubport *hport, uint
     int ret = 0;
     struct usb_setup_packet *setup;
 
-    USB_LOG_INFO("%s %d\r\n", __FUNCTION__, __LINE__);
+    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
 
     setup = hport->setup;
 
@@ -87,6 +87,54 @@ static int rndis_init(struct usbh_rndis *class, struct usbh_hubport *hport, uint
 
         dump_hex(&msg, sizeof(struct rndis_init_c));
     }
+
+    return ret;
+}
+
+static int rndis_query_oid(struct usbh_rndis *class, uint32_t oid, void *data, int *len)
+{
+    int ret = 0;
+    uint8_t intf = 0;
+    struct usbh_hubport *hport = class->hport;
+    struct usb_setup_packet *setup = hport->setup;
+    struct rndis_query msg = {0};
+
+    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
+
+    msg.msg_type = RNDIS_MSG_QUERY;
+    msg.msg_len = sizeof(msg);
+    msg.request_id = class->request_id++;
+    msg.oid = oid;
+    msg.len = *len;
+    msg.offset = 20;
+
+    setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_CLASS | USB_REQUEST_RECIPIENT_INTERFACE;
+    setup->bRequest = 0;
+    setup->wValue = 0;
+    setup->wIndex = intf;
+    setup->wLength = sizeof(msg);
+
+    ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)&msg);
+    USB_LOG_INFO("usbh_control_transfer send oid[%08X] ret: %d\r\n", oid, ret);
+
+    setup->bmRequestType = USB_REQUEST_DIR_IN | USB_REQUEST_CLASS | USB_REQUEST_RECIPIENT_INTERFACE;
+    setup->bRequest = CDC_REQUEST_GET_ENCAPSULATED_RESPONSE;
+    setup->wValue = 0;
+    setup->wIndex = intf;
+    setup->wLength = *len;
+
+    ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)data);
+    USB_LOG_INFO("CDC_REQUEST_GET_ENCAPSULATED_RESPONSE OID ret: %d\r\n", ret);
+
+    *len = 80; // TODO: 获取实际长度
+
+    if(ret == 0)
+    {
+        const struct rndis_query_c *resp = (const struct rndis_query_c *)data;
+
+        USB_LOG_INFO("resp msg type: %08X len: %d id: %08X\r\n", resp->msg_type, resp->msg_len, resp->request_id);
+    }
+
     return ret;
 }
 
@@ -106,16 +154,24 @@ int rndis_test(void)
     memset(cdc_buffer, 0, 512);
     hport = rndis_class->hport;
     intf = rndis_class->intf;
-    USB_LOG_INFO("hport=%p, intf=%d, intf_desc.bNumEndpoints:%d\r\n", hport, intf);
+    USB_LOG_INFO("hport=%p, intf=%d.\r\n", hport, intf);
 
     ret = rndis_init(rndis_class, hport, 0);
 
-#if 1
+    int len = sizeof(cdc_buffer);
+    ret = rndis_query_oid(rndis_class, RNDIS_OID_GEN_SUPPORTED_LIST, cdc_buffer, &len);
+    USB_LOG_INFO("rndis_query_oid RNDIS_OID_GEN_SUPPORTED_LIST, ret=%d, len=%d.\r\n", ret, len);
+    if(ret == 0)
+    {
+        dump_hex(cdc_buffer, len);
+    }
+
+#if 0
     usbh_ep_bulk_async_transfer(rndis_class->bulkin, cdc_buffer, 2048, usbh_cdc_acm_callback, rndis_class);
 #endif
 
-#if 0    
-    USB_LOG_INFO("%s %d\r\n", __FUNCTION__, __LINE__);
+#if 1  
+    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
     ret = usbh_ep_bulk_transfer(rndis_class->bulkin, cdc_buffer, 512);
     if (ret < 0) {
         printf("bulk in error\r\n");
@@ -132,14 +188,14 @@ int rndis_test(void)
     const uint8_t data1[10] = { 0x02, 0x00, 0x00, 0x00, 0x02, 0x02, 0x08, 0x14 };
 
     memcpy(cdc_buffer, data1, 8);
-    USB_LOG_INFO("%s %d\r\n", __FUNCTION__, __LINE__);
+    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
     ret = usbh_ep_bulk_transfer(rndis_class->bulkout, cdc_buffer, 8);
     if (ret < 0) {
         printf("bulk out error\r\n");
         return ret;
     }
     USB_LOG_INFO("send over ret:%d\r\n", ret);
-    USB_LOG_INFO("%s %d\r\n", __FUNCTION__, __LINE__);
+    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
 
     return ret;
 }
