@@ -28,6 +28,8 @@
 static const char *speed_table[] = { "error speed", "low speed", "full speed", "high speed" };
 
 static const struct usbh_class_driver *usbh_find_class_driver(uint8_t class, uint8_t subcalss, uint8_t protocol, uint16_t vid, uint16_t pid);
+void usbh_hport_activate(struct usbh_hubport *hport);
+void usbh_hport_deactivate(struct usbh_hubport *hport);
 
 /* general descriptor field offsets */
 #define DESC_bLength         0 /** Length offset */
