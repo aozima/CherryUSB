@@ -217,7 +217,8 @@ int rndis_test(void)
     intf = rndis_class->intf;
     USB_LOG_INFO("hport=%p, intf=%d.\r\n", hport, intf);
 
-    ret = rndis_init(rndis_class, hport, 0);
+    // ret = rndis_init(rndis_class, hport, 0);
+    // USB_LOG_INFO("rndis_init ret=%d\r\n", ret);
 
 #if 0
     int len = sizeof(cdc_buffer);
