@@ -903,7 +903,7 @@ void USBH_IRQHandler(void)
     /* USER CODE END OTG_HS_IRQn 1 */
 }
 
-void HAL_Delay(uint32_t Delay)
-{
-    usb_osal_msleep(Delay);
-}
+// void HAL_Delay(uint32_t Delay)
+// {
+//     usb_osal_msleep(Delay);
+// }
