@@ -60,14 +60,11 @@ static void usbh_cdc_acm_callback(void *arg, int nbytes)
 {
     //struct usbh_cdc_acm *rndis_class = (struct usbh_cdc_acm *)arg;
 
-    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
-    if (nbytes > 0) {
-        for (size_t i = 0; i < nbytes; i++) {
-            printf("0x%02x ", cdc_buffer[i]);
-        }
+    USB_LOG_INFO("%s L%d, nbytes:%d\r\n", __FUNCTION__, __LINE__, nbytes);
+    if (nbytes > 0) 
+    {
+        dump_hex(cdc_buffer, nbytes);
     }
-
-    printf("nbytes:%d\r\n", nbytes);
 }
 
 static int rndis_init(struct usbh_rndis *class, struct usbh_hubport *hport, uint8_t intf)
@@ -112,6 +109,46 @@ static int rndis_init(struct usbh_rndis *class, struct usbh_hubport *hport, uint
         USB_LOG_INFO("CDC_REQUEST_GET_ENCAPSULATED_RESPONSE RNDIS_MSG_INIT ret: %d\r\n", ret);
 
         dump_hex(&msg, sizeof(struct rndis_init_c));
+    }
+
+    return ret;
+}
+
+static int rndis_keepalive(struct usbh_rndis *class)
+{
+    int ret = 0;
+    uint8_t intf = 0;
+    struct usbh_hubport *hport = class->hport;
+    struct usb_setup_packet *setup = hport->setup;
+    struct rndis_keepalive msg = {0};
+    struct rndis_keepalive_c resp;
+
+    msg.msg_type = RNDIS_MSG_KEEPALIVE;
+    msg.msg_len = sizeof(msg);
+    msg.request_id = class->request_id++;
+
+    setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_CLASS | USB_REQUEST_RECIPIENT_INTERFACE;
+    setup->bRequest = 0;
+    setup->wValue = 0;
+    setup->wIndex = intf;
+    setup->wLength = sizeof(msg);
+
+    ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)&msg);
+    USB_LOG_INFO("usbh_control_transfer RNDIS_MSG_KEEPALIVE ret: %d\r\n", ret);
+
+    setup->bmRequestType = USB_REQUEST_DIR_IN | USB_REQUEST_CLASS | USB_REQUEST_RECIPIENT_INTERFACE;
+    setup->bRequest = CDC_REQUEST_GET_ENCAPSULATED_RESPONSE;
+    setup->wValue = 0;
+    setup->wIndex = intf;
+    setup->wLength = sizeof(resp);
+
+    ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)&resp);
+    USB_LOG_INFO("CDC_REQUEST_GET_ENCAPSULATED_RESPONSE RNDIS_MSG_KEEPALIVE ret: %d\r\n", ret);
+
+    if(ret == 0)
+    {
+        dump_hex(&resp, sizeof(resp));
+        USB_LOG_INFO("resp msg type: %08X len: %d id: %08X status: %08X\r\n", resp.msg_type, resp.msg_len, resp.request_id, resp.status);
     }
 
     return ret;
@@ -207,8 +244,12 @@ int rndis_test(void)
     if(ret == 0)
     {
         memcpy(&dhcp_discover_data[6], cdc_buffer, query_len);
+        memcpy(&dhcp_discover_data[0x46], cdc_buffer, query_len);
         dump_hex(cdc_buffer, query_len);
     }
+
+    ret = rndis_keepalive(rndis_class);
+    USB_LOG_INFO("rndis_keepalive ret=%d\r\n", ret);
 
 #if 0 
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
@@ -256,7 +297,6 @@ int rndis_test(void)
     usbh_ep_bulk_async_transfer(rndis_class->bulkin, cdc_buffer, 2048, usbh_cdc_acm_callback, rndis_class);
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
 #endif
-
 
     return ret;
 }
