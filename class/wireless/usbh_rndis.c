@@ -3,6 +3,66 @@
 
 static const char *DEV_FORMAT = "/dev/e%d";
 
+static int rndis_init(struct usbh_hubport *hport, uint8_t intf)
+{
+    int ret = 0;
+    struct usb_setup_packet *setup;
+    struct usbh_rndis *class = (struct usbh_rndis *)hport->config.intf[intf].priv;
+	union {
+		// void			*buf;
+		// struct rndis_msg_hdr	*header;
+		struct rndis_msg_init	init;
+		struct rndis_msg_query	query;
+	} u;
+    setup = hport->setup;
+
+    /*set config*/
+    setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_STANDARD | USB_REQUEST_RECIPIENT_DEVICE;
+    setup->bRequest = 9; // 9=USB_REQ_SET_CONFIGURATION
+    setup->wValue = 0;
+    setup->wIndex = 0;
+    setup->wLength = 0;
+    setup->wValue = 1;
+
+    ret = usbh_control_transfer(hport->ep0, setup, NULL);
+    USB_LOG_ERR("set config ret: %d\r\n", ret);
+
+    /* set interface */
+
+    /* init */
+    struct rndis_msg_init *msg = &u.init;
+    msg->msg_type = RNDIS_MSG_INIT;
+    msg->msg_len = sizeof(struct rndis_msg_init);
+    msg->request_id = 0;
+    msg->major_version = 1;
+    msg->minor_version = 0;
+    msg->max_transfer_size = 0x4000;
+
+    setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_CLASS | USB_REQUEST_RECIPIENT_INTERFACE;
+    setup->bRequest = 0;
+    setup->wValue = 0;
+    setup->wIndex = intf;
+    setup->wLength = 7;
+
+    ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)msg);
+    USB_LOG_ERR("init ret: %d\r\n", ret);
+
+    /* query */
+    struct rndis_msg_query *query = &u.query;
+    // query->msg_type = RNDIS_MSG_QUERY;
+    // query->msg_len = sizeof(struct rndis_msg_query);
+
+    struct rndis_msg_keepalive msg1;
+    msg1.msg_type = 8;
+    msg1.msg_len = sizeof(struct rndis_msg_keepalive);
+    msg1.request_id = 1;
+
+    ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)&msg1);
+    USB_LOG_ERR("init ret: %d\r\n", ret);
+
+    return ret;
+}
+
 static int usbh_rndis_connect(struct usbh_hubport *hport, uint8_t intf)
 {
     int ret = 0;
@@ -34,6 +94,13 @@ static int usbh_rndis_connect(struct usbh_hubport *hport, uint8_t intf)
         USB_LOG_INFO("wMaxPacketSize=%d, bInterval=%d\r\n\r\n", ep_desc->wMaxPacketSize, ep_desc->bInterval);
     }
 #endif
+
+    ret = rndis_init(hport, intf);
+    if (ret != 0) 
+    {
+        USB_LOG_ERR("rndis_init ret: %d\r\n", ret);
+        return -ENOMEM;
+    }
 
     return ret;
 }
