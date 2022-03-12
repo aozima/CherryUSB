@@ -383,7 +383,7 @@ int usbh_msc_connect(struct usbh_hubport *hport, uint8_t intf)
     USB_LOG_INFO("Block num:%d,block size:%d\r\n", (unsigned int)msc_class->blocknum, (unsigned int)msc_class->blocksize);
 
     extern int msc_test();
-    msc_test();
+    // msc_test();
     return ret;
 }
 
