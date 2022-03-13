@@ -336,6 +336,57 @@ static int rndis_query_oid(struct usbh_rndis *class, uint32_t oid, int query_len
     return ret;
 }
 
+static int rndis_msg_set(struct usbh_rndis *class, uint32_t oid,
+                         void *set_buf, uint32_t set_len)
+{
+    int ret = 0;
+    uint8_t intf = 0;
+    struct usbh_hubport *hport = class->hport;
+    struct usb_setup_packet *setup = hport->setup;
+    struct rndis_set *msg = {0};
+    struct rndis_set_c *resp;
+
+    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
+
+    msg = (struct rndis_set *)rt_malloc(sizeof(struct rndis_set) + set_len);
+    memcpy((uint8_t*)msg + sizeof(struct rndis_set), set_buf, set_len);
+
+    msg->msg_type = RNDIS_MSG_SET;
+    msg->msg_len = sizeof(struct rndis_set) + set_len;
+    msg->request_id = class->request_id++;
+    msg->oid = oid;
+    msg->len = set_len;
+    msg->offset = 20;
+
+    setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_CLASS | USB_REQUEST_RECIPIENT_INTERFACE;
+    setup->bRequest = 0;
+    setup->wValue = 0;
+    setup->wIndex = intf;
+    setup->wLength = sizeof(struct rndis_set) + set_len;
+
+    ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)msg);
+    USB_LOG_INFO("usbh_control_transfer RNDIS_MSG_SET ret: %d\r\n", ret);
+
+    setup->bmRequestType = USB_REQUEST_DIR_IN | USB_REQUEST_CLASS | USB_REQUEST_RECIPIENT_INTERFACE;
+    setup->bRequest = CDC_REQUEST_GET_ENCAPSULATED_RESPONSE;
+    setup->wValue = 0;
+    setup->wIndex = intf;
+    setup->wLength = sizeof(struct rndis_set_c) + 64;
+
+    resp = (struct rndis_set_c *)rt_malloc(sizeof(struct rndis_set_c) + 64);
+
+    ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)resp);
+    USB_LOG_INFO("CDC_REQUEST_GET_ENCAPSULATED_RESPONSE RNDIS_MSG_KEEPALIVE ret: %d\r\n", ret);
+
+    if(ret == 0)
+    {
+        dump_hex(resp, sizeof(struct rndis_set_c) + 64);
+        USB_LOG_INFO("resp msg type: %08X len: %d id: %08X status: %08X\r\n", resp->msg_type, resp->msg_len, resp->request_id, resp->status);
+    }
+
+    return ret;
+}
+
 static rt_err_t rt_rndis_eth_init(rt_device_t dev)
 {
     return RT_EOK;
@@ -515,6 +566,16 @@ static void rt_thread_rndis_data_entry(void *parameter)
     int query_len, result_len;
     len = 4096;//TODO
 
+
+    query_len = 6;
+    memset(cdc_buffer, 0, 512);
+    ret = rndis_query_oid(class, RNDIS_OID_GEN_SUPPORTED_LIST, 0, cdc_buffer, len);
+    USB_LOG_INFO("rndis_query_oid RNDIS_OID_GEN_SUPPORTED_LIST, ret=%d, len=%d.\r\n", ret, len);
+    if(ret == 0)
+    {
+        dump_hex(cdc_buffer, 512);
+    }
+
     query_len = 6;
     memset(cdc_buffer, 0, 100);
     ret = rndis_query_oid(class, RNDIS_OID_802_3_PERMANENT_ADDRESS, query_len, cdc_buffer, len);
@@ -534,6 +595,10 @@ static void rt_thread_rndis_data_entry(void *parameter)
         memcpy(&usbh_rndis_eth_device.dev_addr[0], tmp_buf + 0x18, query_len); // 这里不知道为什么不在0位置，
         dump_hex(cdc_buffer, query_len*10);
     }
+
+    uint32_t pquery_rlt = 0x0f;
+    ret = rndis_msg_set(class, RNDIS_OID_GEN_CURRENT_PACKET_FILTER, &pquery_rlt, 4);
+    USB_LOG_INFO("rndis_msg_set RNDIS_OID_GEN_CURRENT_PACKET_FILTER, ret=%d, len=%d.\r\n", ret, len);
 
 #ifdef RT_USING_DEVICE_OPS
     usbh_rndis_eth_device.parent.parent.ops           = &rndis_device_ops;
