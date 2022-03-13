@@ -513,20 +513,23 @@ static void rt_thread_rndis_data_entry(void *parameter)
     len = 4096;//TODO
 
     query_len = 6;
+    memset(cdc_buffer, 0, 100);
     ret = rndis_query_oid(class, RNDIS_OID_802_3_PERMANENT_ADDRESS, query_len, cdc_buffer, len);
     USB_LOG_INFO("rndis_query_oid RNDIS_OID_802_3_PERMANENT_ADDRESS, ret=%d, len=%d.\r\n", ret, len);
     if(ret == 0)
     {
-        dump_hex(cdc_buffer, query_len);
+        dump_hex(cdc_buffer, query_len*10);
     }
+    memset(cdc_buffer, 0, 100);
     ret = rndis_query_oid(class, RNDIS_OID_802_3_CURRENT_ADDRESS, query_len, cdc_buffer, len);
     USB_LOG_INFO("rndis_query_oid RNDIS_OID_802_3_CURRENT_ADDRESS, ret=%d, len=%d.\r\n", ret, len);
     if(ret == 0)
     {
-        memcpy(&dhcp_discover_data[6], cdc_buffer, query_len);
-        memcpy(&dhcp_discover_data[0x46], cdc_buffer, query_len);
-        memcpy(&usbh_rndis_eth_device.dev_addr[0], cdc_buffer, query_len);
-        dump_hex(cdc_buffer, query_len);
+        const uint8_t *tmp_buf = (const uint8_t *)cdc_buffer;
+        // memcpy(&dhcp_discover_data[6], cdc_buffer, query_len);
+        // memcpy(&dhcp_discover_data[0x46], cdc_buffer, query_len);
+        memcpy(&usbh_rndis_eth_device.dev_addr[0], tmp_buf + 0x18, query_len); // 这里不知道为什么不在0位置，
+        dump_hex(cdc_buffer, query_len*10);
     }
 
 #ifdef RT_USING_DEVICE_OPS
@@ -548,6 +551,7 @@ static void rt_thread_rndis_data_entry(void *parameter)
     usbh_rndis_eth_device.hport = hport;
     usbh_rndis_eth_device.intf = intf;
 
+    rt_thread_delay(1000*10);
     eth_device_init(&usbh_rndis_eth_device.parent, "u0");
 
 #if 0
