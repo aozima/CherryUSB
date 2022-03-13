@@ -10,7 +10,7 @@
 
 #define DM9051_RX_DUMP
 #define DM9051_TX_DUMP
-#define DM9051_DUMP_RAW
+// #define DM9051_DUMP_RAW
 
 #define MAX_ADDR_LEN         6
 
@@ -448,10 +448,13 @@ rt_err_t rt_rndis_eth_tx(rt_device_t dev, struct pbuf* p)
     }
     USB_LOG_INFO("send over ret:%d\r\n", ret);
 
+#if 0
+    rt_thread_delay(10);
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
     memset(cdc_buffer2, 0, sizeof(cdc_buffer2));
     usbh_ep_bulk_async_transfer(class->bulkin, cdc_buffer2, 2048, usbh_cdc_acm_callback, class);
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
+#endif
 
 _exit:
     if(tmp_buf)
@@ -561,13 +564,54 @@ static void rt_thread_rndis_data_entry(void *parameter)
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
 #endif
 
+    while (1) {
+        ret = usbh_ep_bulk_transfer(class->bulkin, cdc_buffer2, 2048);
+        if (ret < 0) {
+            USB_LOG_WRN("%s L%d bulk in error ret=%d\r\n", __FUNCTION__, __LINE__, ret);
+            continue;
+            ;
+        }
+        USB_LOG_INFO("%s L%d bulkin ret=%d\r\n", __FUNCTION__, __LINE__, ret);
+
+        struct rndis_data_hdr *data_hdr = (struct rndis_data_hdr *)cdc_buffer2;
+        if (data_hdr->msg_type == RNDIS_MSG_PACKET) {
+            struct pbuf *p = RT_NULL;
+            /* allocate buffer           */
+            p = pbuf_alloc(PBUF_LINK, data_hdr->msg_len, PBUF_RAM);
+            if (p != NULL) {
+                const uint8_t *tmp_buf = (const uint8_t *)cdc_buffer2;
+
+                // memcpy((void *)p->payload, tmp_buf + sizeof(struct rndis_data_hdr), data_hdr->msg_len);
+                pbuf_take(p, tmp_buf + sizeof(struct rndis_data_hdr), data_hdr->msg_len);
+
+#ifdef DM9051_RX_DUMP
+                // if (p)
+                // packet_dump(__FUNCTION__, p);
+                dump_hex(p->payload, data_hdr->msg_len);
+#endif /* DM9051_RX_DUMP */
+
+                struct eth_device *eth_dev = &usbh_rndis_eth_device.parent;
+                if ((eth_dev->netif->input(p, eth_dev->netif)) != ERR_OK) {
+                    USB_LOG_INFO("F:%s L:%d IP input error", __FUNCTION__, __LINE__);
+                    pbuf_free(p);
+                    p = RT_NULL;
+                }
+                USB_LOG_INFO("%s L%d input OK\r\n", __FUNCTION__, __LINE__);
+            } else {
+                USB_LOG_ERR("%s L%d pbuf_alloc NULL\r\n", __FUNCTION__, __LINE__);
+            }
+        } else {
+            USB_LOG_WRN("%s L%d msg_type != RNDIS_MSG_PACKET\r\n", __FUNCTION__, __LINE__);
+        }
+    } // while (1)
+
     return;
 
 
 
 #if 0 
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
-    ret = usbh_ep_bulk_transfer(rndis_class->bulkin, cdc_buffer, 512);
+    ret = usbh_ep_bulk_transfer(class->bulkin, cdc_buffer, 512);
     if (ret < 0) {
         printf("bulk in error\r\n");
         return ret;
@@ -606,7 +650,7 @@ static void rt_thread_rndis_data_entry(void *parameter)
     USB_LOG_INFO("send over ret:%d\r\n", ret);
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
 
-#if 1
+#if 0
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
     usbh_ep_bulk_async_transfer(class->bulkin, cdc_buffer, 2048, usbh_cdc_acm_callback, class);
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
@@ -633,7 +677,7 @@ int rndis_test(void)
 
     return ret;
 }
-MSH_CMD_EXPORT(rndis_test, rndis_test.);
+// MSH_CMD_EXPORT(rndis_test, rndis_test.);
 
 extern int usbh_initialize(void);
 MSH_CMD_EXPORT_ALIAS(usbh_initialize, usb, CherryUSB initial.);
