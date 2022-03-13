@@ -5,6 +5,13 @@
 #include "usb_cdc.h"
 #include <class/wireless/usbh_rndis.h>
 
+#include <netif/ethernetif.h>
+#include <netdev.h>
+
+#define DM9051_RX_DUMP
+#define DM9051_TX_DUMP
+//#define DM9051_DUMP_RAW
+
 #define __is_print(ch) ((unsigned int)((ch) - ' ') < 127u - ' ')
 static void dump_hex(const void *ptr, rt_size_t buflen)
 {
@@ -28,6 +35,76 @@ static void dump_hex(const void *ptr, rt_size_t buflen)
         rt_kprintf("\n");
     }
 }
+
+#if defined(DM9051_RX_DUMP) ||  defined(DM9051_TX_DUMP)
+static void packet_dump(const char * msg, const struct pbuf* p)
+{
+#ifdef DM9051_DUMP_RAW    
+    const struct pbuf* q;
+    rt_uint32_t i,j;
+    rt_uint8_t *ptr;
+
+    rt_kprintf("%s %d byte\n", msg, p->tot_len);
+
+    i=0;
+    for(q=p; q != RT_NULL; q= q->next)
+    {
+        ptr = q->payload;
+
+        for(j=0; j<q->len; j++)
+        {
+            if( (i%8) == 0 )
+            {
+                rt_kprintf("  ");
+            }
+            if( (i%16) == 0 )
+            {
+                rt_kprintf("\r\n");
+            }
+            rt_kprintf("%02X ", *ptr);
+
+            i++;
+            ptr++;
+        }
+    }
+
+    rt_kprintf("\n\n");
+#else /* DM9051_DUMP_RAW */
+    rt_uint8_t header[6 + 6 + 2];
+    rt_uint16_t type;
+
+    pbuf_copy_partial(p, header, sizeof(header), 0);
+    type = (header[12] << 8) | header[13];
+
+    rt_kprintf("%02X:%02X:%02X:%02X:%02X:%02X <== %02X:%02X:%02X:%02X:%02X:%02X ",
+               header[0], header[1], header[2], header[3], header[4], header[5],
+               header[6], header[7], header[8], header[9], header[10], header[11]);
+
+    switch (type)
+    {
+    case 0x0800:
+        rt_kprintf("IPv4. ");
+        break;
+
+    case 0x0806:
+        rt_kprintf("ARP.  ");
+        break;
+
+    case 0x86DD:
+        rt_kprintf("IPv6. ");
+        break;
+
+    default:
+        rt_kprintf("%04X. ", type);
+        break;
+    }
+
+    rt_kprintf("%s %d byte. \n", msg, p->tot_len);
+#endif /* DM9051_DUMP_RAW */
+}
+#else
+#define packet_dump(...)
+#endif /* dump */
 
 static uint8_t dhcp_discover_data[350] = {
 	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x60, 0x6E, 0x0C, 0x22, 0x38, 0x08, 0x00, 0x45, 0x00, 
@@ -199,9 +276,6 @@ static int rndis_query_oid(struct usbh_rndis *class, uint32_t oid, int query_len
     return ret;
 }
 
-#include <netif/ethernetif.h>
-#include <netdev.h>
-
 #define MAX_ADDR_LEN         6
 
 struct rt_rndis_eth
@@ -209,6 +283,7 @@ struct rt_rndis_eth
     /* inherit from ethernet device */
     struct eth_device parent;
 
+    struct usbh_rndis *class;
     struct usbh_hubport *hport;
     uint8_t intf;
 
@@ -283,9 +358,57 @@ struct pbuf *rt_rndis_eth_rx(rt_device_t dev)
 rt_err_t rt_rndis_eth_tx(rt_device_t dev, struct pbuf* p)
 {
     struct pbuf* q;
+    int ret = 0;
     rt_err_t result = RT_EOK;
+    uint8_t *tmp_buf = RT_NULL;
+    rt_rndis_eth_t rndis_eth = (rt_rndis_eth_t)dev;
+    struct usbh_rndis *class = rndis_eth->class;
 
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
+
+#ifdef DM9051_TX_DUMP
+    packet_dump(__FUNCTION__, p);
+#endif /* DM9051_TX_DUMP */
+
+    ret = rndis_keepalive(class);
+    USB_LOG_INFO("rndis_keepalive ret=%d\r\n", ret);
+
+    tmp_buf = (uint8_t *)rt_malloc(sizeof(struct rndis_data_hdr) + p->tot_len);
+    if (!tmp_buf) {
+        USB_LOG_INFO("[%s L%d], no memory for pbuf, len=%d.", __FUNCTION__, __LINE__, p->tot_len);
+        goto _exit;
+    }
+
+    struct rndis_data_hdr *data_hdr = (struct rndis_data_hdr *)tmp_buf;
+
+    pbuf_copy_partial(p, tmp_buf + sizeof(struct rndis_data_hdr), p->tot_len, 0);
+
+    data_hdr->msg_type = RNDIS_MSG_PACKET;
+    data_hdr->msg_len = sizeof(struct rndis_data_hdr) + p->tot_len;
+    data_hdr->data_offset = sizeof(struct rndis_data_hdr) - 8;
+    data_hdr->data_len = p->tot_len;
+    data_hdr->oob_data_offset = 0;
+    data_hdr->oob_data_len = 0;
+    data_hdr->num_oob = 0;
+    data_hdr->packet_data_offset = 0;
+    data_hdr->packet_data_len = 0;
+    data_hdr->vc_handle = 0;
+    data_hdr->reserved = 0;
+
+    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
+    ret = usbh_ep_bulk_transfer(class->bulkout, tmp_buf, data_hdr->msg_len);
+    if (ret < 0) {
+        printf("bulk out error\r\n");
+        USB_LOG_INFO("send over ret:%d\r\n", ret);
+        goto _exit;
+    }
+    USB_LOG_INFO("send over ret:%d\r\n", ret);
+
+_exit:
+    if(tmp_buf)
+    {
+        rt_free(tmp_buf);
+    }
 
     return result;
 }
@@ -312,24 +435,24 @@ static void rt_thread_rndis_data_entry(void *parameter)
     rt_thread_delay(1000*5);
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
 
-    struct usbh_rndis *rndis_class = (struct usbh_rndis *)usbh_find_class_instance("/dev/e1");
-    if (rndis_class == NULL) {
+    struct usbh_rndis *class = (struct usbh_rndis *)usbh_find_class_instance("/dev/e1");
+    if (class == NULL) {
         printf("do not find /dev/ttyACM0\r\n");
         return;
     }
-    USB_LOG_INFO("usbh_rndis=%p\r\n", rndis_class);
+    USB_LOG_INFO("usbh_rndis=%p\r\n", class);
 
     memset(cdc_buffer, 0, 512);
-    hport = rndis_class->hport;
-    intf = rndis_class->intf;
+    hport = class->hport;
+    intf = class->intf;
     USB_LOG_INFO("hport=%p, intf=%d.\r\n", hport, intf);
 
-    // ret = rndis_init(rndis_class, hport, 0);
+    // ret = rndis_init(class, hport, 0);
     // USB_LOG_INFO("rndis_init ret=%d\r\n", ret);
 
 #if 0
     int len = sizeof(cdc_buffer);
-    ret = rndis_query_oid(rndis_class, RNDIS_OID_GEN_SUPPORTED_LIST, cdc_buffer, &len);
+    ret = rndis_query_oid(class, RNDIS_OID_GEN_SUPPORTED_LIST, cdc_buffer, &len);
     USB_LOG_INFO("rndis_query_oid RNDIS_OID_GEN_SUPPORTED_LIST, ret=%d, len=%d.\r\n", ret, len);
     if(ret == 0)
     {
@@ -341,13 +464,13 @@ static void rt_thread_rndis_data_entry(void *parameter)
     len = 4096;//TODO
 
     query_len = 6;
-    ret = rndis_query_oid(rndis_class, RNDIS_OID_802_3_PERMANENT_ADDRESS, query_len, cdc_buffer, len);
+    ret = rndis_query_oid(class, RNDIS_OID_802_3_PERMANENT_ADDRESS, query_len, cdc_buffer, len);
     USB_LOG_INFO("rndis_query_oid RNDIS_OID_802_3_PERMANENT_ADDRESS, ret=%d, len=%d.\r\n", ret, len);
     if(ret == 0)
     {
         dump_hex(cdc_buffer, query_len);
     }
-    ret = rndis_query_oid(rndis_class, RNDIS_OID_802_3_CURRENT_ADDRESS, query_len, cdc_buffer, len);
+    ret = rndis_query_oid(class, RNDIS_OID_802_3_CURRENT_ADDRESS, query_len, cdc_buffer, len);
     USB_LOG_INFO("rndis_query_oid RNDIS_OID_802_3_CURRENT_ADDRESS, ret=%d, len=%d.\r\n", ret, len);
     if(ret == 0)
     {
@@ -372,12 +495,20 @@ static void rt_thread_rndis_data_entry(void *parameter)
     usbh_rndis_eth_device.parent.eth_rx               = rt_rndis_eth_rx;
     usbh_rndis_eth_device.parent.eth_tx               = rt_rndis_eth_tx;
 
+    usbh_rndis_eth_device.class = class;
+    usbh_rndis_eth_device.hport = hport;
+    usbh_rndis_eth_device.intf = intf;
+
     eth_device_init(&usbh_rndis_eth_device.parent, "u0");
+
+#if 1
+    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
+    usbh_ep_bulk_async_transfer(class->bulkin, cdc_buffer, 2048, usbh_cdc_acm_callback, class);
+    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
+#endif
 
     return;
 
-    ret = rndis_keepalive(rndis_class);
-    USB_LOG_INFO("rndis_keepalive ret=%d\r\n", ret);
 
 
 #if 0 
@@ -413,7 +544,7 @@ static void rt_thread_rndis_data_entry(void *parameter)
     memcpy(&cdc_buffer[sizeof(struct rndis_data_hdr)], dhcp_discover_data, sizeof(dhcp_discover_data));
 
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
-    ret = usbh_ep_bulk_transfer(rndis_class->bulkout, cdc_buffer, data_hdr->msg_len);
+    ret = usbh_ep_bulk_transfer(class->bulkout, cdc_buffer, data_hdr->msg_len);
     if (ret < 0) {
         printf("bulk out error\r\n");
         return;
@@ -423,7 +554,7 @@ static void rt_thread_rndis_data_entry(void *parameter)
 
 #if 1
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
-    usbh_ep_bulk_async_transfer(rndis_class->bulkin, cdc_buffer, 2048, usbh_cdc_acm_callback, rndis_class);
+    usbh_ep_bulk_async_transfer(class->bulkin, cdc_buffer, 2048, usbh_cdc_acm_callback, class);
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
 #endif
 
