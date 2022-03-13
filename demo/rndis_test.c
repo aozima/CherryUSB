@@ -164,6 +164,10 @@ static void usbh_cdc_acm_callback(void *arg, int nbytes)
     {
         // dump_hex(cdc_buffer, nbytes);
     }
+    else
+    {
+        return;
+    }
 
     struct rndis_data_hdr *data_hdr = (struct rndis_data_hdr *)cdc_buffer2;
     // struct rndis_msg_hdr *msg_hdr = (struct rndis_msg_hdr *)cdc_buffer;
@@ -207,6 +211,7 @@ static void usbh_cdc_acm_callback(void *arg, int nbytes)
     else
     {
         USB_LOG_WRN("%s L%d msg_type != RNDIS_MSG_PACKET\r\n", __FUNCTION__, __LINE__);
+        dump_hex(data_hdr, nbytes);
     }
 }
 
@@ -466,13 +471,13 @@ rt_err_t rt_rndis_eth_tx(rt_device_t dev, struct pbuf* p)
     struct usbh_rndis *class = rndis_eth->class;
 
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
-    return result;
+    // return result;
 
     static int tx_count = 0;
-    if (tx_count > 2) {
+    if (tx_count++ != 3) {
         // eth_device_linkchange(&usbh_rndis_eth_device.parent, RT_TRUE);
+        return result;
     }
-    tx_count++;
 
 #ifdef DM9051_TX_DUMP
     packet_dump(__FUNCTION__, p);
