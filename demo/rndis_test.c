@@ -199,16 +199,20 @@ static int rndis_query_oid(struct usbh_rndis *class, uint32_t oid, int query_len
     return ret;
 }
 
-int rndis_test(void)
+static void rt_thread_rndis_data_entry(void *parameter)
 {
     int ret, len;
     struct usbh_hubport *hport;
     uint8_t intf;
 
+    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
+    rt_thread_delay(1000*5);
+    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
+
     struct usbh_rndis *rndis_class = (struct usbh_rndis *)usbh_find_class_instance("/dev/e1");
     if (rndis_class == NULL) {
         printf("do not find /dev/ttyACM0\r\n");
-        return -1;
+        return;
     }
     USB_LOG_INFO("usbh_rndis=%p\r\n", rndis_class);
 
@@ -288,7 +292,7 @@ int rndis_test(void)
     ret = usbh_ep_bulk_transfer(rndis_class->bulkout, cdc_buffer, data_hdr->msg_len);
     if (ret < 0) {
         printf("bulk out error\r\n");
-        return ret;
+        return;
     }
     USB_LOG_INFO("send over ret:%d\r\n", ret);
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
@@ -298,6 +302,25 @@ int rndis_test(void)
     usbh_ep_bulk_async_transfer(rndis_class->bulkin, cdc_buffer, 2048, usbh_cdc_acm_callback, rndis_class);
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
 #endif
+
+}
+
+int rndis_test(void)
+{
+    int ret = 0;
+
+    rt_thread_t tid = rt_thread_create("rndis",
+                                       rt_thread_rndis_data_entry,
+                                       0,
+                                       1024 * 6,
+                                       6,
+                                       20);
+    if(tid)
+    {
+        USB_LOG_INFO("%s L%d rt_thread_startup rndis\r\n", __FUNCTION__, __LINE__);
+        rt_thread_startup(tid);
+    }
+    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
 
     return ret;
 }

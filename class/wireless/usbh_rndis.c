@@ -113,6 +113,9 @@ static int usbh_rndis_connect(struct usbh_hubport *hport, uint8_t intf)
     //     return -ENOMEM;
     // }
 
+    extern int rndis_test(void);
+    rndis_test();
+
     return ret;
 }
 
