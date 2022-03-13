@@ -40,7 +40,13 @@ static void dump_hex(const void *ptr, rt_size_t buflen)
 
         for (j=0; j<16; j++)
             if (i+j < buflen)
+            {
+                if ((j % 8) == 0) {
+                    rt_kprintf("  ");
+                }
+
                 rt_kprintf("%02X ", buf[i+j]);
+            }
             else
                 rt_kprintf("   ");
         rt_kprintf(" ");
@@ -573,7 +579,8 @@ static void rt_thread_rndis_data_entry(void *parameter)
     USB_LOG_INFO("rndis_query_oid RNDIS_OID_GEN_SUPPORTED_LIST, ret=%d, len=%d.\r\n", ret, len);
     if(ret == 0)
     {
-        dump_hex(cdc_buffer, 512);
+        // dump_hex(cdc_buffer, 512);
+        dump_hex(cdc_buffer, 64);
     }
 
     query_len = 6;
@@ -599,6 +606,33 @@ static void rt_thread_rndis_data_entry(void *parameter)
     uint32_t pquery_rlt = 0x0f;
     ret = rndis_msg_set(class, RNDIS_OID_GEN_CURRENT_PACKET_FILTER, &pquery_rlt, 4);
     USB_LOG_INFO("rndis_msg_set RNDIS_OID_GEN_CURRENT_PACKET_FILTER, ret=%d, len=%d.\r\n", ret, len);
+
+    {
+        uint8_t MULTICAST_LIST[] = { 0x01, 0x00, 0x5E, 0x00, 0x00, 0x01 };
+        ret = rndis_msg_set(class, RNDIS_OID_802_3_MULTICAST_LIST, &MULTICAST_LIST[0], 6);
+        USB_LOG_INFO("rndis_msg_set RNDIS_OID_802_3_MULTICAST_LIST, ret=%d, len=%d.\r\n", ret, len);
+    }
+
+    for(int ii=0; ii<20; ii++)
+    {
+        query_len = 4;
+        memset(cdc_buffer, 0, 100);
+        ret = rndis_query_oid(class, RNDIS_OID_GEN_LINK_SPEED, query_len, cdc_buffer, len);
+        USB_LOG_INFO("rndis_query_oid RNDIS_OID_GEN_LINK_SPEED, ret=%d, len=%d.\r\n", ret, len);
+        if (ret == 0) {
+            dump_hex(cdc_buffer, query_len * 10);
+        }
+
+        query_len = 4;
+        memset(cdc_buffer, 0, 100);
+        ret = rndis_query_oid(class, RNDIS_OID_GEN_MEDIA_CONNECT_STATUS, query_len, cdc_buffer, len);
+        USB_LOG_INFO("rndis_query_oid RNDIS_OID_GEN_MEDIA_CONNECT_STATUS, ret=%d, len=%d.\r\n\r\n\r\n", ret, len);
+        if (ret == 0) {
+            dump_hex(cdc_buffer, query_len * 10);
+        }
+
+        rt_thread_delay(1000);
+    }
 
 #ifdef RT_USING_DEVICE_OPS
     usbh_rndis_eth_device.parent.parent.ops           = &rndis_device_ops;
