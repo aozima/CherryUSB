@@ -36,7 +36,7 @@ static void dump_hex(const void *ptr, rt_size_t buflen)
 
     for (i=0; i<buflen; i+=16)
     {
-        rt_kprintf("%08X: ", i);
+        rt_kprintf("%08X:", i);
 
         for (j=0; j<16; j++)
             if (i+j < buflen)
@@ -466,6 +466,13 @@ rt_err_t rt_rndis_eth_tx(rt_device_t dev, struct pbuf* p)
     struct usbh_rndis *class = rndis_eth->class;
 
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
+    return result;
+
+    static int tx_count = 0;
+    if (tx_count > 2) {
+        // eth_device_linkchange(&usbh_rndis_eth_device.parent, RT_TRUE);
+    }
+    tx_count++;
 
 #ifdef DM9051_TX_DUMP
     packet_dump(__FUNCTION__, p);
@@ -577,10 +584,9 @@ static void rt_thread_rndis_data_entry(void *parameter)
     memset(cdc_buffer, 0, 512);
     ret = rndis_query_oid(class, RNDIS_OID_GEN_SUPPORTED_LIST, 0, cdc_buffer, len);
     USB_LOG_INFO("rndis_query_oid RNDIS_OID_GEN_SUPPORTED_LIST, ret=%d, len=%d.\r\n", ret, len);
-    if(ret == 0)
-    {
-        // dump_hex(cdc_buffer, 512);
-        dump_hex(cdc_buffer, 64);
+    if (ret == 0) {
+        struct rndis_query_c *resp = (struct rndis_query_c *)cdc_buffer;
+        dump_hex((const uint8_t *)cdc_buffer + sizeof(struct rndis_query_c), resp->len);
     }
 
     query_len = 6;
@@ -589,7 +595,10 @@ static void rt_thread_rndis_data_entry(void *parameter)
     USB_LOG_INFO("rndis_query_oid RNDIS_OID_802_3_PERMANENT_ADDRESS, ret=%d, len=%d.\r\n", ret, len);
     if(ret == 0)
     {
-        dump_hex(cdc_buffer, query_len*10);
+        const uint8_t *tmp_buf = (const uint8_t *)cdc_buffer;
+        struct rndis_query_c *resp = (struct rndis_query_c *)cdc_buffer;
+
+        dump_hex((const uint8_t *)cdc_buffer + sizeof(struct rndis_query_c), resp->len);
     }
     memset(cdc_buffer, 0, 100);
     ret = rndis_query_oid(class, RNDIS_OID_802_3_CURRENT_ADDRESS, query_len, cdc_buffer, len);
@@ -597,10 +606,10 @@ static void rt_thread_rndis_data_entry(void *parameter)
     if(ret == 0)
     {
         const uint8_t *tmp_buf = (const uint8_t *)cdc_buffer;
-        // memcpy(&dhcp_discover_data[6], cdc_buffer, query_len);
-        // memcpy(&dhcp_discover_data[0x46], cdc_buffer, query_len);
-        memcpy(&usbh_rndis_eth_device.dev_addr[0], tmp_buf + 0x18, query_len); // 这里不知道为什么不在0位置，
-        dump_hex(cdc_buffer, query_len*10);
+        struct rndis_query_c *resp = (struct rndis_query_c *)cdc_buffer;
+
+        memcpy(&usbh_rndis_eth_device.dev_addr[0], tmp_buf + sizeof(struct rndis_query_c), query_len); // 这里不知道为什么不在0位置，
+        dump_hex((const uint8_t *)cdc_buffer + sizeof(struct rndis_query_c), resp->len);
     }
 
     uint32_t pquery_rlt = 0x0f;
@@ -613,22 +622,24 @@ static void rt_thread_rndis_data_entry(void *parameter)
         USB_LOG_INFO("rndis_msg_set RNDIS_OID_802_3_MULTICAST_LIST, ret=%d, len=%d.\r\n", ret, len);
     }
 
-    for(int ii=0; ii<20; ii++)
+    for(int ii=0; ii<3; ii++)
     {
         query_len = 4;
         memset(cdc_buffer, 0, 100);
         ret = rndis_query_oid(class, RNDIS_OID_GEN_LINK_SPEED, query_len, cdc_buffer, len);
         USB_LOG_INFO("rndis_query_oid RNDIS_OID_GEN_LINK_SPEED, ret=%d, len=%d.\r\n", ret, len);
         if (ret == 0) {
-            dump_hex(cdc_buffer, query_len * 10);
+            struct rndis_query_c *resp = (struct rndis_query_c *)cdc_buffer;
+            dump_hex((const uint8_t *)cdc_buffer + sizeof(struct rndis_query_c), resp->len);
         }
 
         query_len = 4;
         memset(cdc_buffer, 0, 100);
         ret = rndis_query_oid(class, RNDIS_OID_GEN_MEDIA_CONNECT_STATUS, query_len, cdc_buffer, len);
-        USB_LOG_INFO("rndis_query_oid RNDIS_OID_GEN_MEDIA_CONNECT_STATUS, ret=%d, len=%d.\r\n\r\n\r\n", ret, len);
+        USB_LOG_INFO("rndis_query_oid RNDIS_OID_GEN_MEDIA_CONNECT_STATUS, ret=%d, len=%d.\r\n", ret, len);
         if (ret == 0) {
-            dump_hex(cdc_buffer, query_len * 10);
+            struct rndis_query_c *resp = (struct rndis_query_c *)cdc_buffer;
+            dump_hex((const uint8_t *)cdc_buffer + sizeof(struct rndis_query_c), resp->len);
         }
 
         rt_thread_delay(1000);
@@ -657,13 +668,35 @@ static void rt_thread_rndis_data_entry(void *parameter)
     eth_device_init(&usbh_rndis_eth_device.parent, "u0");
 
 #if 0
+    ret = rndis_keepalive(class);
+    USB_LOG_INFO("%s L%d rndis_keepalive ret=%d\r\n", __FUNCTION__, __LINE__, ret);
+
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
     memset(cdc_buffer2, 0, sizeof(cdc_buffer2));
     usbh_ep_bulk_async_transfer(class->bulkin, cdc_buffer2, 2048, usbh_cdc_acm_callback, class);
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
+    return;
+#endif
+
+#if 1
+    while (1) {
+        ret = rndis_keepalive(class);
+        USB_LOG_INFO("%s L%d rndis_keepalive ret=%d\r\n", __FUNCTION__, __LINE__, ret);
+
+        memset(cdc_buffer2, 0, sizeof(cdc_buffer2));
+        USB_LOG_INFO("try async_transfer %s L%d\r\n", __FUNCTION__, __LINE__);
+        usbh_ep_bulk_async_transfer(class->bulkin, cdc_buffer2, 2048, usbh_cdc_acm_callback, class);
+        USB_LOG_INFO("async_transfer %s L%d\r\n", __FUNCTION__, __LINE__);
+
+        rt_thread_delay(1000 * 10);
+    }
+    return;
 #endif
 
     while (1) {
+        ret = rndis_keepalive(class);
+        USB_LOG_INFO("%s L%d rndis_keepalive ret=%d\r\n", __FUNCTION__, __LINE__, ret);
+
         ret = usbh_ep_bulk_transfer(class->bulkin, cdc_buffer2, 2048);
         if (ret < 0) {
             USB_LOG_WRN("%s L%d bulk in error ret=%d\r\n", __FUNCTION__, __LINE__, ret);
@@ -701,6 +734,7 @@ static void rt_thread_rndis_data_entry(void *parameter)
             }
         } else {
             USB_LOG_WRN("%s L%d msg_type != RNDIS_MSG_PACKET\r\n", __FUNCTION__, __LINE__);
+            dump_hex(data_hdr, ret);
         }
     } // while (1)
 
