@@ -302,3 +302,7 @@ int rndis_test(void)
     return ret;
 }
 MSH_CMD_EXPORT(rndis_test, rndis_test.);
+
+extern int usbh_initialize(void);
+MSH_CMD_EXPORT_ALIAS(usbh_initialize, usb, CherryUSB initial.);
+
