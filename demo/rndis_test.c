@@ -215,10 +215,12 @@ static void usbh_cdc_acm_callback(void *arg, int nbytes)
     }
 }
 
-static int rndis_init(struct usbh_rndis *class, struct usbh_hubport *hport, uint8_t intf)
+static int rndis_init(struct usbh_rndis *class)
 {
     int ret = 0;
-    struct usb_setup_packet *setup;
+    uint8_t intf = 0;
+    struct usbh_hubport *hport = class->hport;
+    struct usb_setup_packet *setup = hport->setup;
 
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
 
@@ -245,18 +247,25 @@ static int rndis_init(struct usbh_rndis *class, struct usbh_hubport *hport, uint
     }
 
     {
-        struct rndis_init_c msg;
+        struct rndis_init_c *resp;
+        // struct rndis_init_c msg;
+        resp = (struct rndis_init_c *)rt_malloc(sizeof(struct rndis_init_c) + 512);
 
         setup->bmRequestType = USB_REQUEST_DIR_IN | USB_REQUEST_CLASS | USB_REQUEST_RECIPIENT_INTERFACE;
         setup->bRequest = CDC_REQUEST_GET_ENCAPSULATED_RESPONSE;
         setup->wValue = 0;
         setup->wIndex = intf;
-        setup->wLength = sizeof(struct rndis_init_c);
+        setup->wLength = 4096;
 
-        ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)&msg);
+        ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)resp);
         USB_LOG_INFO("CDC_REQUEST_GET_ENCAPSULATED_RESPONSE RNDIS_MSG_INIT ret: %d\r\n", ret);
 
-        dump_hex(&msg, sizeof(struct rndis_init_c));
+        if (ret == 0) {
+            dump_hex(resp, sizeof(struct rndis_init_c) + 64);
+            USB_LOG_INFO("resp msg type: %08X len: %d id: %08X status: %08X\r\n", resp->msg_type, resp->msg_len, resp->request_id, resp->status);
+        }
+        // dump_hex(&msg, sizeof(struct rndis_init_c));
+        rt_free(resp);
     }
 
     return ret;
@@ -288,9 +297,9 @@ static int rndis_keepalive(struct usbh_rndis *class)
     setup->bRequest = CDC_REQUEST_GET_ENCAPSULATED_RESPONSE;
     setup->wValue = 0;
     setup->wIndex = intf;
-    setup->wLength = 512;
+    setup->wLength = 4096;
 
-    resp = (struct rndis_keepalive_c *)rt_malloc(sizeof(struct rndis_keepalive_c) + 512);
+    resp = (struct rndis_keepalive_c *)rt_malloc(4096);
 
     ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)resp);
     USB_LOG_INFO("CDC_REQUEST_GET_ENCAPSULATED_RESPONSE RNDIS_MSG_KEEPALIVE ret: %d\r\n", ret);
@@ -299,6 +308,11 @@ static int rndis_keepalive(struct usbh_rndis *class)
     {
         dump_hex(resp, resp->msg_len + 32);
         USB_LOG_INFO("resp msg type: %08X len: %d id: %08X status: %08X\r\n\r\n", resp->msg_type, resp->msg_len, resp->request_id, resp->status);
+
+        if(resp->msg_type != RNDIS_MSG_KEEPALIVE_C)
+        {
+            USB_LOG_ERR("resp msg type: %08X len: %d id: %08X status: %08X\r\n\r\n", resp->msg_type, resp->msg_len, resp->request_id, resp->status);
+        }
     }
     rt_free(resp);
 
@@ -556,7 +570,7 @@ static void rt_thread_rndis_data_entry(void *parameter)
     uint8_t intf;
 
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
-    rt_thread_delay(1000*5);
+    rt_thread_delay(1000*1);
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
 
     struct usbh_rndis *class = (struct usbh_rndis *)usbh_find_class_instance("/dev/e1");
@@ -571,8 +585,8 @@ static void rt_thread_rndis_data_entry(void *parameter)
     intf = class->intf;
     USB_LOG_INFO("hport=%p, intf=%d.\r\n", hport, intf);
 
-    // ret = rndis_init(class, hport, 0);
-    // USB_LOG_INFO("rndis_init ret=%d\r\n", ret);
+    ret = rndis_init(class);
+    USB_LOG_INFO("rndis_init ret=%d\r\n", ret);
 
 #if 0
     int len = sizeof(cdc_buffer);
@@ -630,7 +644,7 @@ static void rt_thread_rndis_data_entry(void *parameter)
         USB_LOG_INFO("rndis_msg_set RNDIS_OID_802_3_MULTICAST_LIST, ret=%d, len=%d.\r\n", ret, len);
     }
 
-    for(int ii=0; ii<3; ii++)
+    for(int ii=0; ii<1; ii++)
     {
         query_len = 4;
         memset(cdc_buffer, 0, 100);
@@ -650,7 +664,7 @@ static void rt_thread_rndis_data_entry(void *parameter)
             dump_hex((const uint8_t *)cdc_buffer + sizeof(struct rndis_query_c), resp->len);
         }
 
-        rt_thread_delay(1000);
+        // rt_thread_delay(1000);
     }
 
 #ifdef RT_USING_DEVICE_OPS
@@ -672,11 +686,11 @@ static void rt_thread_rndis_data_entry(void *parameter)
     usbh_rndis_eth_device.hport = hport;
     usbh_rndis_eth_device.intf = intf;
 
-    rt_thread_delay(1000*10);
-    eth_device_init(&usbh_rndis_eth_device.parent, "u0");
+    // rt_thread_delay(1000*10);
+    // eth_device_init(&usbh_rndis_eth_device.parent, "u0");
 
 #if 1
-    for (int ii = 0; ii < 20; ii++) {
+    for (int ii = 0; ii < 100; ii++) {
         rt_thread_delay(1000 * 2);
         USB_LOG_INFO("%s L%d rndis_keepalive #%d\r\n", __FUNCTION__, __LINE__, ii);
         ret = rndis_keepalive(class);
