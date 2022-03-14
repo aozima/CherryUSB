@@ -421,7 +421,7 @@ static int rndis_msg_set(struct usbh_rndis *class, uint32_t oid,
     resp = (struct rndis_set_c *)rt_malloc(sizeof(struct rndis_set_c) + 64);
 
     ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)resp);
-    USB_LOG_INFO("CDC_REQUEST_GET_ENCAPSULATED_RESPONSE RNDIS_MSG_KEEPALIVE ret: %d\r\n", ret);
+    USB_LOG_INFO("CDC_REQUEST_GET_ENCAPSULATED_RESPONSE RNDIS_MSG_SET ret: %d\r\n", ret);
 
     if(ret == 0)
     {
@@ -735,7 +735,7 @@ static void rt_thread_rndis_data_entry(void *parameter)
     return;
 #endif
 
-#if 1
+#if 0
     while (1) {
         // ret = rndis_keepalive(class);
         // USB_LOG_INFO("%s L%d rndis_keepalive ret=%d\r\n", __FUNCTION__, __LINE__, ret);
@@ -754,11 +754,13 @@ static void rt_thread_rndis_data_entry(void *parameter)
         ret = rndis_keepalive(class);
         USB_LOG_INFO("%s L%d rndis_keepalive ret=%d\r\n", __FUNCTION__, __LINE__, ret);
 
+        rt_thread_delay(10);
+
+        memset(cdc_buffer2, 0, sizeof(cdc_buffer2));
         ret = usbh_ep_bulk_transfer(class->bulkin, cdc_buffer2, 2048);
         if (ret < 0) {
             USB_LOG_WRN("%s L%d bulk in error ret=%d\r\n", __FUNCTION__, __LINE__, ret);
             continue;
-            ;
         }
         USB_LOG_INFO("%s L%d bulkin ret=%d\r\n", __FUNCTION__, __LINE__, ret);
 
