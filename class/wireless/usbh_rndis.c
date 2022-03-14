@@ -154,9 +154,9 @@ static int usbh_rndis_data_connect(struct usbh_hubport *hport, uint8_t intf)
     }
 #endif
 
-    for (uint8_t i = 0; i < hport->config.intf[intf + 1].intf_desc.bNumEndpoints; i++) 
+    for (uint8_t i = 0; i < hport->config.intf[intf].intf_desc.bNumEndpoints; i++) 
     {
-        ep_desc = &hport->config.intf[intf + 1].ep[i].ep_desc;
+        ep_desc = &hport->config.intf[intf].ep[i].ep_desc;
 
         ep_cfg.ep_addr = ep_desc->bEndpointAddress;
         ep_cfg.ep_type = ep_desc->bmAttributes & USB_ENDPOINT_TYPE_MASK;
