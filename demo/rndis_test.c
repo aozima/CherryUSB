@@ -269,7 +269,7 @@ static int rndis_keepalive(struct usbh_rndis *class)
     struct usbh_hubport *hport = class->hport;
     struct usb_setup_packet *setup = hport->setup;
     struct rndis_keepalive msg = {0};
-    struct rndis_keepalive_c resp;
+    struct rndis_keepalive_c *resp;
 
     msg.msg_type = RNDIS_MSG_KEEPALIVE;
     msg.msg_len = sizeof(msg);
@@ -288,16 +288,19 @@ static int rndis_keepalive(struct usbh_rndis *class)
     setup->bRequest = CDC_REQUEST_GET_ENCAPSULATED_RESPONSE;
     setup->wValue = 0;
     setup->wIndex = intf;
-    setup->wLength = sizeof(resp);
+    setup->wLength = 512;
 
-    ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)&resp);
+    resp = (struct rndis_keepalive_c *)rt_malloc(sizeof(struct rndis_keepalive_c) + 512);
+
+    ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)resp);
     USB_LOG_INFO("CDC_REQUEST_GET_ENCAPSULATED_RESPONSE RNDIS_MSG_KEEPALIVE ret: %d\r\n", ret);
 
     if(ret == 0)
     {
-        dump_hex(&resp, sizeof(resp));
-        USB_LOG_INFO("resp msg type: %08X len: %d id: %08X status: %08X\r\n", resp.msg_type, resp.msg_len, resp.request_id, resp.status);
+        dump_hex(resp, resp->msg_len + 32);
+        USB_LOG_INFO("resp msg type: %08X len: %d id: %08X status: %08X\r\n\r\n", resp->msg_type, resp->msg_len, resp->request_id, resp->status);
     }
+    rt_free(resp);
 
     return ret;
 }
@@ -471,7 +474,7 @@ rt_err_t rt_rndis_eth_tx(rt_device_t dev, struct pbuf* p)
     struct usbh_rndis *class = rndis_eth->class;
 
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
-    // return result;
+    return result;
 
     static int tx_count = 0;
     if (tx_count++ != 3) {
@@ -671,6 +674,16 @@ static void rt_thread_rndis_data_entry(void *parameter)
 
     rt_thread_delay(1000*10);
     eth_device_init(&usbh_rndis_eth_device.parent, "u0");
+
+#if 1
+    for (int ii = 0; ii < 20; ii++) {
+        rt_thread_delay(1000 * 2);
+        USB_LOG_INFO("%s L%d rndis_keepalive #%d\r\n", __FUNCTION__, __LINE__, ii);
+        ret = rndis_keepalive(class);
+        USB_LOG_INFO("%s L%d rndis_keepalive ret=%d\r\n", __FUNCTION__, __LINE__, ret);
+    }
+    return;
+#endif
 
 #if 0
     ret = rndis_keepalive(class);
