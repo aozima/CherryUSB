@@ -291,7 +291,7 @@ static int rndis_keepalive(struct usbh_rndis *class)
     setup->wLength = sizeof(msg);
 
     ret = usbh_control_transfer(hport->ep0, setup, (uint8_t *)&msg);
-    USB_LOG_INFO("usbh_control_transfer RNDIS_MSG_KEEPALIVE ret: %d\r\n", ret);
+    USB_LOG_INFO("usbh_control_transfer RNDIS_MSG_KEEPALIVE ret: %d, id:%08X\r\n", ret, msg.request_id);
 
     setup->bmRequestType = USB_REQUEST_DIR_IN | USB_REQUEST_CLASS | USB_REQUEST_RECIPIENT_INTERFACE;
     setup->bRequest = CDC_REQUEST_GET_ENCAPSULATED_RESPONSE;
@@ -309,16 +309,27 @@ static int rndis_keepalive(struct usbh_rndis *class)
         dump_hex(resp, resp->msg_len + 32);
         USB_LOG_INFO("resp msg type: %08X len: %d id: %08X status: %08X\r\n\r\n", resp->msg_type, resp->msg_len, resp->request_id, resp->status);
 
-        if(resp->msg_type != RNDIS_MSG_KEEPALIVE_C)
-        {
-            USB_LOG_ERR("resp msg type: %08X len: %d id: %08X status: %08X\r\n\r\n", resp->msg_type, resp->msg_len, resp->request_id, resp->status);
-        }
-
         if(resp->msg_type == RNDIS_MSG_INDICATE)
         {
             USB_LOG_WRN("%s L%d RNDIS_MSG_INDICATE\r\n", __FUNCTION__, __LINE__);
             ret = 123456789; // magic code.
         }
+
+        if(resp->msg_type != RNDIS_MSG_KEEPALIVE_C)
+        {
+            USB_LOG_ERR("resp msg type: %08X len: %d id: %08X status: %08X\r\n\r\n", resp->msg_type, resp->msg_len, resp->request_id, resp->status);
+
+            setup->bmRequestType = USB_REQUEST_DIR_IN | USB_REQUEST_CLASS | USB_REQUEST_RECIPIENT_INTERFACE;
+            setup->bRequest = CDC_REQUEST_GET_ENCAPSULATED_RESPONSE;
+            setup->wValue = 0;
+            setup->wIndex = intf;
+            setup->wLength = 4096;
+
+            int ret2 = usbh_control_transfer(hport->ep0, setup, (uint8_t *)resp);
+            USB_LOG_INFO("CDC_REQUEST_GET_ENCAPSULATED_RESPONSE RNDIS_MSG_KEEPALIVE ret2: %d\r\n", ret2);
+            USB_LOG_ERR("resp msg2 type: %08X len: %d id: %08X status: %08X\r\n\r\n", resp->msg_type, resp->msg_len, resp->request_id, resp->status);
+        }
+
     }
     rt_free(resp);
 
