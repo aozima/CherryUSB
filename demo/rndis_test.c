@@ -816,8 +816,8 @@ static void rt_thread_rndis_data_entry(void *parameter)
 
 #ifdef DM9051_RX_DUMP
                 // if (p)
-                // packet_dump(__FUNCTION__, p);
-                dump_hex(p->payload, data_hdr->msg_len);
+                packet_dump(__FUNCTION__, p);
+                // dump_hex(p->payload, data_hdr->msg_len);
 #endif /* DM9051_RX_DUMP */
 
                 struct eth_device *eth_dev = &usbh_rndis_eth_device.parent;
@@ -832,7 +832,7 @@ static void rt_thread_rndis_data_entry(void *parameter)
             }
         } else {
             USB_LOG_WRN("%s L%d msg_type != RNDIS_MSG_PACKET\r\n", __FUNCTION__, __LINE__);
-            dump_hex(data_hdr, ret);
+            dump_hex(data_hdr, 32);
         }
     } // while (1)
 
