@@ -313,6 +313,12 @@ static int rndis_keepalive(struct usbh_rndis *class)
         {
             USB_LOG_ERR("resp msg type: %08X len: %d id: %08X status: %08X\r\n\r\n", resp->msg_type, resp->msg_len, resp->request_id, resp->status);
         }
+
+        if(resp->msg_type == RNDIS_MSG_INDICATE)
+        {
+            USB_LOG_WRN("%s L%d RNDIS_MSG_INDICATE\r\n", __FUNCTION__, __LINE__);
+            ret = 123456789; // magic code.
+        }
     }
     rt_free(resp);
 
@@ -488,20 +494,20 @@ rt_err_t rt_rndis_eth_tx(rt_device_t dev, struct pbuf* p)
     struct usbh_rndis *class = rndis_eth->class;
 
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
-    return result;
+    // return result;
 
-    static int tx_count = 0;
-    if (tx_count++ != 3) {
-        // eth_device_linkchange(&usbh_rndis_eth_device.parent, RT_TRUE);
-        return result;
-    }
+    // static int tx_count = 0;
+    // if (tx_count++ != 3) {
+    //     // eth_device_linkchange(&usbh_rndis_eth_device.parent, RT_TRUE);
+    //     return result;
+    // }
 
 #ifdef DM9051_TX_DUMP
     packet_dump(__FUNCTION__, p);
 #endif /* DM9051_TX_DUMP */
 
-    ret = rndis_keepalive(class);
-    USB_LOG_INFO("rndis_keepalive ret=%d\r\n", ret);
+    // ret = rndis_keepalive(class);
+    // USB_LOG_INFO("rndis_keepalive ret=%d\r\n", ret);
 
     tmp_buf = (uint8_t *)rt_malloc(sizeof(struct rndis_data_hdr) + p->tot_len);
     if (!tmp_buf) {
@@ -695,7 +701,15 @@ static void rt_thread_rndis_data_entry(void *parameter)
         USB_LOG_INFO("%s L%d rndis_keepalive #%d\r\n", __FUNCTION__, __LINE__, ii);
         ret = rndis_keepalive(class);
         USB_LOG_INFO("%s L%d rndis_keepalive ret=%d\r\n", __FUNCTION__, __LINE__, ret);
+
+        if(ret == 123456789)
+        {
+            USB_LOG_INFO("%s L%d rndis_keepalive ret=%d RNDIS_MSG_INDICATE\r\n", __FUNCTION__, __LINE__, ret);
+            break;
+        }
     }
+    eth_device_init(&usbh_rndis_eth_device.parent, "u0");
+
     return;
 #endif
 
