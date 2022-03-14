@@ -6,14 +6,16 @@
 extern const struct usbh_class_driver msc_class_driver;
 
 struct usbh_rndis {
+    struct usbh_hubport *hport;
+
+    uint8_t ctrl_intf; /* Control interface number */
+    uint8_t data_intf; /* Data interface number */
+
     usbh_epinfo_t bulkin;  /* Bulk IN endpoint */
     usbh_epinfo_t bulkout; /* Bulk OUT endpoint */
     usbh_epinfo_t int_notify; /* Notify endpoint */
 
     uint32_t	request_id;
-
-    struct usbh_hubport *hport;
-    uint8_t intf;
 };
 
 /*

@@ -590,7 +590,7 @@ static void rt_thread_rndis_data_entry(void *parameter)
     rt_thread_delay(1000*1);
     USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
 
-    struct usbh_rndis *class = (struct usbh_rndis *)usbh_find_class_instance("/dev/e1");
+    struct usbh_rndis *class = (struct usbh_rndis *)usbh_find_class_instance("/dev/e0");
     if (class == NULL) {
         printf("do not find /dev/ttyACM0\r\n");
         return;
@@ -599,7 +599,7 @@ static void rt_thread_rndis_data_entry(void *parameter)
 
     memset(cdc_buffer, 0, sizeof(cdc_buffer));
     hport = class->hport;
-    intf = class->intf;
+    intf = class->ctrl_intf;
     USB_LOG_INFO("hport=%p, intf=%d.\r\n", hport, intf);
 
     ret = rndis_init(class);
