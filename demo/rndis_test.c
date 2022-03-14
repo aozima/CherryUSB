@@ -707,7 +707,7 @@ static void rt_thread_rndis_data_entry(void *parameter)
     // eth_device_init(&usbh_rndis_eth_device.parent, "u0");
 
 #if 1
-    for (int ii = 0; ii < 100; ii++) {
+    for (int ii = 0; ii < 2; ii++) {
         rt_thread_delay(1000 * 2);
         USB_LOG_INFO("%s L%d rndis_keepalive #%d\r\n", __FUNCTION__, __LINE__, ii);
         ret = rndis_keepalive(class);
@@ -720,6 +720,45 @@ static void rt_thread_rndis_data_entry(void *parameter)
         }
     }
     eth_device_init(&usbh_rndis_eth_device.parent, "u0");
+    eth_device_linkchange(&usbh_rndis_eth_device.parent, RT_FALSE);
+
+    // wait link up
+    for(int ii=0; ii<10; ii++)
+    {
+        query_len = 4;
+        memset(cdc_buffer, 0, 100);
+        ret = rndis_query_oid(class, RNDIS_OID_GEN_LINK_SPEED, query_len, cdc_buffer, len);
+        USB_LOG_INFO("rndis_query_oid RNDIS_OID_GEN_LINK_SPEED, ret=%d, len=%d.\r\n", ret, len);
+        if (ret == 0) {
+            struct rndis_query_c *resp = (struct rndis_query_c *)cdc_buffer;
+            dump_hex((const uint8_t *)cdc_buffer + sizeof(struct rndis_query_c), resp->len);
+        }
+
+        query_len = 4;
+        memset(cdc_buffer, 0, 100);
+        ret = rndis_query_oid(class, RNDIS_OID_GEN_MEDIA_CONNECT_STATUS, query_len, cdc_buffer, len);
+        USB_LOG_INFO("rndis_query_oid RNDIS_OID_GEN_MEDIA_CONNECT_STATUS, ret=%d, len=%d.\r\n", ret, len);
+        if (ret == 0) {
+            uint32_t *link;
+            struct rndis_query_c *resp = (struct rndis_query_c *)cdc_buffer;
+            dump_hex((const uint8_t *)cdc_buffer + sizeof(struct rndis_query_c), resp->len);
+
+            link = (uint32_t *)((const uint8_t *)cdc_buffer + sizeof(struct rndis_query_c));
+            if(*link)
+            {
+                USB_LOG_INFO("LINK DOWN\r\n\r\n\r\n\r\n");
+                eth_device_linkchange(&usbh_rndis_eth_device.parent, RT_FALSE);
+            }
+            else
+            {
+                USB_LOG_INFO("LINK UP\r\n\r\n\r\n\r\n");
+                eth_device_linkchange(&usbh_rndis_eth_device.parent, RT_TRUE);
+                break;
+            }
+        }
+
+        // rt_thread_delay(1000);
+    }
 
     // return;
 #endif
