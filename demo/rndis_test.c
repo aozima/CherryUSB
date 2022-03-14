@@ -504,7 +504,7 @@ rt_err_t rt_rndis_eth_tx(rt_device_t dev, struct pbuf* p)
     rt_rndis_eth_t rndis_eth = (rt_rndis_eth_t)dev;
     struct usbh_rndis *class = rndis_eth->class;
 
-    USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
+    // USB_LOG_INFO("%s L%d\r\n", __FUNCTION__, __LINE__);
     // return result;
 
     // static int tx_count = 0;
@@ -790,10 +790,11 @@ static void rt_thread_rndis_data_entry(void *parameter)
 #endif
 
     while (1) {
+        rt_thread_delay(20);
         ret = rndis_keepalive(class);
-        USB_LOG_INFO("%s L%d rndis_keepalive ret=%d\r\n", __FUNCTION__, __LINE__, ret);
+        // USB_LOG_INFO("%s L%d rndis_keepalive ret=%d\r\n", __FUNCTION__, __LINE__, ret);
 
-        rt_thread_delay(10);
+        rt_thread_delay(30);
 
         memset(cdc_buffer2, 0, sizeof(cdc_buffer2));
         ret = usbh_ep_bulk_transfer(class->bulkin, cdc_buffer2, 2048);
