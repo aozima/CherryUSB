@@ -710,7 +710,7 @@ static void rt_thread_rndis_data_entry(void *parameter)
     }
     eth_device_init(&usbh_rndis_eth_device.parent, "u0");
 
-    return;
+    // return;
 #endif
 
 #if 0
@@ -726,15 +726,15 @@ static void rt_thread_rndis_data_entry(void *parameter)
 
 #if 1
     while (1) {
-        ret = rndis_keepalive(class);
-        USB_LOG_INFO("%s L%d rndis_keepalive ret=%d\r\n", __FUNCTION__, __LINE__, ret);
+        // ret = rndis_keepalive(class);
+        // USB_LOG_INFO("%s L%d rndis_keepalive ret=%d\r\n", __FUNCTION__, __LINE__, ret);
 
         memset(cdc_buffer2, 0, sizeof(cdc_buffer2));
         USB_LOG_INFO("try async_transfer %s L%d\r\n", __FUNCTION__, __LINE__);
         usbh_ep_bulk_async_transfer(class->bulkin, cdc_buffer2, 2048, usbh_cdc_acm_callback, class);
         USB_LOG_INFO("async_transfer %s L%d\r\n", __FUNCTION__, __LINE__);
 
-        rt_thread_delay(1000 * 10);
+        rt_thread_delay(200);
     }
     return;
 #endif
